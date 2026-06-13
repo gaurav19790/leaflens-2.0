@@ -4,13 +4,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,55 +23,77 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.theme.*
 
 import androidx.compose.ui.platform.LocalContext
-import android.content.Context
 import android.widget.Toast
 
+import com.example.BuildConfig
+import com.example.api.CreatePaymentIntentRequest
+import com.example.api.PaymentApi
 import com.stripe.android.paymentsheet.PaymentSheet
 import com.stripe.android.paymentsheet.PaymentSheetResult
 import com.stripe.android.paymentsheet.rememberPaymentSheet
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PricingScreen(onClose: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var selectedPointPack by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(PointPack("Starter Pack", 100, "Rs 99")) }
+    var pointBalance by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(PointWallet.balance(context)) }
+    var isCheckoutLoading by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val paymentSheet = rememberPaymentSheet(
         paymentResultCallback = { result ->
             when (result) {
                 is PaymentSheetResult.Completed -> {
-                    val prefs = context.getSharedPreferences("leaflens_prefs", Context.MODE_PRIVATE)
-                    prefs.edit().putBoolean("is_premium", true).apply()
-                    Toast.makeText(context, "Payment successful! Welcome to Premium.", Toast.LENGTH_SHORT).show()
+                    pointBalance = PointWallet.add(context, selectedPointPack.points)
+                    Toast.makeText(context, "Payment successful! Added ${selectedPointPack.points} points.", Toast.LENGTH_SHORT).show()
                     onClose()
                 }
                 is PaymentSheetResult.Canceled -> {
                     Toast.makeText(context, "Payment canceled.", Toast.LENGTH_SHORT).show()
                 }
                 is PaymentSheetResult.Failed -> {
-                    Toast.makeText(context, "Payment simulation failed (Backend Required).", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "Payment failed. Please try again.", Toast.LENGTH_LONG).show()
                 }
             }
         }
     )
 
-    fun simulateStripePayment() {
-        try {
-            // Note: In a production app, you would fetch this from your secure backend
-            val fakeClientSecret = "pi_3MtwBwLkdIwHu7ix28a3tqPa_secret_a1b2c3d4e5f6g7h8i9j0k"
-            paymentSheet.presentWithPaymentIntent(
-                paymentIntentClientSecret = fakeClientSecret,
-                configuration = PaymentSheet.Configuration(
-                    merchantDisplayName = "Leaf Lens",
+    fun startPointCheckout(pack: PointPack) {
+        selectedPointPack = pack
+        if (BuildConfig.PAYMENTS_BASE_URL.isBlank()) {
+            Toast.makeText(context, "Payment backend URL missing. Add PAYMENTS_BASE_URL in .env.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        scope.launch {
+            isCheckoutLoading = true
+            try {
+                val response = PaymentApi.create(BuildConfig.PAYMENTS_BASE_URL).createPaymentIntent(
+                    CreatePaymentIntentRequest(
+                        packName = pack.name,
+                        points = pack.points,
+                        priceLabel = pack.price
+                    )
                 )
-            )
-        } catch (e: Exception) {
-            Toast.makeText(context, "Stripe setup error: ${e.message}", Toast.LENGTH_SHORT).show()
+                paymentSheet.presentWithPaymentIntent(
+                    paymentIntentClientSecret = response.clientSecret,
+                    configuration = PaymentSheet.Configuration(
+                        merchantDisplayName = "Leaf Lens",
+                    )
+                )
+            } catch (e: Exception) {
+                Toast.makeText(context, "Payment setup error: ${e.message}", Toast.LENGTH_LONG).show()
+            } finally {
+                isCheckoutLoading = false
+            }
         }
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = BackgroundLight) {
         Column(modifier = Modifier.fillMaxSize()) {
             TopAppBar(
-                title = { Text("Upgrade to Pro", fontWeight = FontWeight.Bold) },
+                title = { Text("Buy Points", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onClose) {
                         Icon(Icons.Default.Close, contentDescription = "Close")
@@ -90,7 +114,7 @@ fun PricingScreen(onClose: () -> Unit) {
             ) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = "Unlock the full potential of your garden.",
+                    text = "Pay only when AI helps your garden.",
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary,
@@ -98,7 +122,7 @@ fun PricingScreen(onClose: () -> Unit) {
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "FloraScan Premium gives you unlimited AI plant analysis, custom care schedules, and disease history tracking.",
+                    text = "Use points for plant scans and AI Botanist talks. Current balance: $pointBalance points.",
                     fontSize = 14.sp,
                     color = TextSecondary,
                     textAlign = TextAlign.Center
@@ -106,74 +130,45 @@ fun PricingScreen(onClose: () -> Unit) {
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Monthly Card
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Envelope),
-                    elevation = CardDefaults.cardElevation(2.dp)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Text("Monthly Plan", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = EnvTextPrimary)
-                        Text("₹149 / month", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = HeroCardBg)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        PricingFeatureItem("Unlimited AI plant scans")
-                        PricingFeatureItem("Priority AI disease diagnosis")
-                        PricingFeatureItem("Smart, personalized reminders")
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Button(
-                            onClick = { 
-                                simulateStripePayment()
-                            },
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = HeroCardBg),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text("Subscribe Monthly", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
-                        }
-                    }
-                }
+                PointPackCard(
+                    title = "Starter Pack",
+                    price = "Rs 99",
+                    points = 100,
+                    subtitle = "10 plant scans or 50 AI talks",
+                    features = listOf("Best for quick diagnosis", "No subscription lock-in", "Points stay in your wallet"),
+                    isLoading = isCheckoutLoading,
+                    onBuy = { startPointCheckout(PointPack("Starter Pack", 100, "Rs 99")) }
+                )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Yearly Card
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Envelope),
-                    elevation = CardDefaults.cardElevation(2.dp)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                            Text("Yearly Plan", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = EnvTextPrimary)
-                            Surface(color = HeroCardBg.copy(alpha = 0.2f), shape = RoundedCornerShape(8.dp)) {
-                                Text("Best Value", color = HeroCardBg, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
-                            }
-                        }
-                        Text("₹999 / year", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = HeroCardBg)
-                        Text("Save ~44% annually", fontSize = 12.sp, color = TextSecondary)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        PricingFeatureItem("All Monthly features")
-                        PricingFeatureItem("Cloud synced collections")
-                        PricingFeatureItem("Support independent developers")
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Button(
-                            onClick = { 
-                                simulateStripePayment()
-                            },
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = HeroCardBg),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text("Subscribe Yearly", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
-                        }
-                    }
-                }
-                
+                PointPackCard(
+                    title = "Garden Pack",
+                    price = "Rs 249",
+                    points = 300,
+                    subtitle = "30 plant scans or 150 AI talks",
+                    features = listOf("Most useful for active plant owners", "Lower cost per scan", "Works for scan and chat"),
+                    badge = "Best Value",
+                    isLoading = isCheckoutLoading,
+                    onBuy = { startPointCheckout(PointPack("Garden Pack", 300, "Rs 249")) }
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                PointPackCard(
+                    title = "Nursery Pack",
+                    price = "Rs 499",
+                    points = 750,
+                    subtitle = "75 plant scans or 375 AI talks",
+                    features = listOf("For many plants or client visits", "Highest point bonus", "Supports cloud AI costs"),
+                    isLoading = isCheckoutLoading,
+                    onBuy = { startPointCheckout(PointPack("Nursery Pack", 750, "Rs 499")) }
+                )
+
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 Text(
-                    text = "Free tier includes: 10 AI scans & full garden journal.",
+                    text = "Plant scan: ${PointWallet.SCAN_COST} points. AI talk: ${PointWallet.CHAT_COST} points. New users get ${PointWallet.STARTER_POINTS} free points.",
                     fontSize = 14.sp,
                     color = TextPrimary,
                     fontWeight = FontWeight.Medium,
@@ -183,15 +178,61 @@ fun PricingScreen(onClose: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                     Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(12.dp), tint = TextSecondary)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Secure payments by Stripe (Test Mode)", fontSize = 12.sp, color = TextSecondary)
+                    Text("Secure payments by Stripe (backend PaymentIntent required)", fontSize = 12.sp, color = TextSecondary)
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Cancel anytime. Terms and conditions apply.",
+                    text = "No monthly commitment. Terms and conditions apply.",
                     fontSize = 12.sp,
                     color = TextSecondary,
                     textAlign = TextAlign.Center
                 )
+            }
+        }
+    }
+}
+
+data class PointPack(val name: String, val points: Int, val price: String)
+
+@Composable
+fun PointPackCard(
+    title: String,
+    price: String,
+    points: Int,
+    subtitle: String,
+    features: List<String>,
+    badge: String? = null,
+    isLoading: Boolean = false,
+    onBuy: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Envelope),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Text(title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = EnvTextPrimary)
+                badge?.let {
+                    Surface(color = HeroCardBg.copy(alpha = 0.2f), shape = RoundedCornerShape(8.dp)) {
+                        Text(it, color = HeroCardBg, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                    }
+                }
+            }
+            Text("$points points", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = HeroCardBg)
+            Text("$price - $subtitle", fontSize = 12.sp, color = TextSecondary)
+            Spacer(modifier = Modifier.height(12.dp))
+            features.forEach { PricingFeatureItem(it) }
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(
+                onClick = onBuy,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = HeroCardBg),
+                shape = RoundedCornerShape(12.dp),
+                enabled = !isLoading
+            ) {
+                Text(if (isLoading) "Preparing Checkout..." else "Buy $points Points", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
             }
         }
     }
@@ -217,3 +258,4 @@ fun PricingFeatureItem(text: String) {
 }
 
 private val Envelope = Color(0xFFF3F4ED)
+

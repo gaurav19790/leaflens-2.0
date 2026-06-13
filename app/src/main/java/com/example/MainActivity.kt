@@ -37,8 +37,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        com.google.android.gms.ads.MobileAds.initialize(this) {}
-        
         try {
             com.stripe.android.PaymentConfiguration.init(this, "pk_test_TYooMQauvdEDq54NiTphI7jx")
         } catch (e: Exception) {
@@ -201,7 +199,9 @@ fun MainScreen(rootNavController: NavController) {
                 )
             }
             composable("aichat") {
-                com.example.ui.AiChatScreen()
+                com.example.ui.AiChatScreen(
+                    onNavigateToPricing = { navController.navigate("pricing") }
+                )
             }
             composable("plantProfile/{plantName}") { backStackEntry ->
                 val plantName = backStackEntry.arguments?.getString("plantName") ?: ""
