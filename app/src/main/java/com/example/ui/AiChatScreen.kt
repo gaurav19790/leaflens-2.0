@@ -20,15 +20,33 @@ import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AiChatScreen(viewModel: AiChatViewModel = viewModel()) {
+fun AiChatScreen(
+    onNavigateToPricing: () -> Unit = {},
+    viewModel: AiChatViewModel = viewModel()
+) {
     val messages by viewModel.messages.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val pointBalance by viewModel.pointBalance.collectAsState()
     var inputText by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        viewModel.refreshBalance()
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("AI Botanist", fontWeight = FontWeight.Bold) },
+                title = {
+                    Column {
+                        Text("AI Botanist", fontWeight = FontWeight.Bold)
+                        Text("${PointWallet.CHAT_COST} points per talk - $pointBalance pts left", fontSize = 12.sp, color = TextSecondary)
+                    }
+                },
+                actions = {
+                    TextButton(onClick = onNavigateToPricing) {
+                        Text("Buy", color = GreenPrimary, fontWeight = FontWeight.Bold)
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = BackgroundLight,
                     titleContentColor = TextPrimary
@@ -102,6 +120,7 @@ fun AiChatScreen(viewModel: AiChatViewModel = viewModel()) {
                                 inputText = ""
                             }
                         },
+                        enabled = !isLoading,
                         colors = IconButtonDefaults.iconButtonColors(contentColor = GreenPrimary)
                     ) {
                         Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")

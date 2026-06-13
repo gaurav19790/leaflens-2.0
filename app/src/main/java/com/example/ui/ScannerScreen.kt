@@ -76,6 +76,7 @@ fun ScannerScreen(
     val scanResult by viewModel.scanResult.collectAsState()
     val isScanning by viewModel.isScanning.collectAsState()
     val error by viewModel.error.collectAsState()
+    var pointBalance by remember { mutableIntStateOf(PointWallet.balance(context)) }
 
     var showConfirmationDialog by remember { mutableStateOf(false) }
     var showLimitDialog by remember { mutableStateOf(false) }
@@ -139,8 +140,8 @@ fun ScannerScreen(
         if (showLimitDialog) {
             AlertDialog(
                 onDismissRequest = { showLimitDialog = false },
-                title = { Text("Daily Limit Reached") },
-                text = { Text("You've reached your free daily limit of 10 scans. Upgrade to Premium for unlimited scans and advanced plant care features.") },
+                title = { Text("Need More Points") },
+                text = { Text("A plant scan costs ${PointWallet.SCAN_COST} points. You have $pointBalance points. Buy points to keep scanning.") },
                 confirmButton = {
                     Button(
                         onClick = { 
@@ -149,7 +150,7 @@ fun ScannerScreen(
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = HeroCardBg)
                     ) {
-                        Text("View Plans")
+                        Text("Buy Points")
                     }
                 },
                 dismissButton = {
@@ -184,16 +185,12 @@ fun ScannerScreen(
                 confirmButton = {
                     Button(
                         onClick = {
-                            val prefs = context.getSharedPreferences("flora_scan_prefs", android.content.Context.MODE_PRIVATE)
-                            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-                            val dateStr = dateFormat.format(java.util.Date())
-                            val currentScans = prefs.getInt("scans_count_$dateStr", 0)
-                            
-                            if (currentScans >= 10) {
+                            if (!PointWallet.spend(context, PointWallet.SCAN_COST)) {
+                                pointBalance = PointWallet.balance(context)
                                 showConfirmationDialog = false
                                 showLimitDialog = true
                             } else {
-                                prefs.edit().putInt("scans_count_$dateStr", currentScans + 1).apply()
+                                pointBalance = PointWallet.balance(context)
                                 selectedBitmap = pendingBitmap
                                 viewModel.scanPlant(pendingBitmap!!)
                                 showConfirmationDialog = false
@@ -268,6 +265,16 @@ fun ScannerScreen(
                         )
                     }
                 }
+            }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 48.dp, end = 16.dp)
+                    .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(20.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Text("$pointBalance pts", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
 
             // Results Card at Bottom
@@ -621,4 +628,3 @@ fun AnimatedScannerOverlay(isScanning: Boolean) {
         }
     }
 }
-
