@@ -1,5 +1,8 @@
 package com.example.ui
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
@@ -24,8 +27,11 @@ import com.example.ui.theme.*
 
 @Composable
 fun ProfileScreen(onLogout: () -> Unit, onUpgradeClick: () -> Unit = {}, onScanHistoryClick: () -> Unit = {}) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var email by remember { mutableStateOf("Offline Mode") }
     var scanCount by remember { mutableStateOf("0") }
+    var pointBalance by remember { mutableIntStateOf(PointWallet.balance(context)) }
+    val rewardedPoints = 15
     
     LaunchedEffect(Unit) {
         try {
@@ -76,6 +82,7 @@ fun ProfileScreen(onLogout: () -> Unit, onUpgradeClick: () -> Unit = {}, onScanH
                         Column {
                             Text(email, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = EnvTextPrimary)
                             Text("Total Scans: $scanCount", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = HeroCardBg)
+                            Text("Points Balance: $pointBalance", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = HeroCardBg)
                             Spacer(modifier = Modifier.height(8.dp))
                             Button(
                                 onClick = onUpgradeClick,
@@ -84,7 +91,7 @@ fun ProfileScreen(onLogout: () -> Unit, onUpgradeClick: () -> Unit = {}, onScanH
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                                 modifier = Modifier.height(36.dp)
                             ) {
-                                Text("Upgrade to Pro", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+                                Text("Buy Points", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
                             }
                         }
                     }
@@ -98,12 +105,11 @@ fun ProfileScreen(onLogout: () -> Unit, onUpgradeClick: () -> Unit = {}, onScanH
                     colors = CardDefaults.cardColors(containerColor = SurfaceVariant)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Get Free Scans", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = TextPrimary)
-                        Text("Watch a short video to earn 3 free plant scans.", fontSize = 14.sp, color = TextSecondary)
+                        Text("Earn Free Points", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = TextPrimary)
+                        Text("Watch a short video to earn $rewardedPoints points for scans or AI talks.", fontSize = 14.sp, color = TextSecondary)
                         Spacer(modifier = Modifier.height(12.dp))
                         
-                        val context = androidx.compose.ui.platform.LocalContext.current
-                        val activity = context as? android.app.Activity
+                        val activity = context.findActivity()
                         var isAdLoading by remember { mutableStateOf(false) }
 
                         Button(
@@ -121,9 +127,9 @@ fun ProfileScreen(onLogout: () -> Unit, onUpgradeClick: () -> Unit = {}, onScanH
                                         }
                                         override fun onAdLoaded(ad: com.google.android.gms.ads.rewarded.RewardedAd) {
                                             isAdLoading = false
-                                            ad.show(activity) { rewardItem ->
-                                                // Reward user
-                                                android.widget.Toast.makeText(context, "Earned ${rewardItem.amount} free scans!", android.widget.Toast.LENGTH_SHORT).show()
+                                            ad.show(activity) { _ ->
+                                                pointBalance = PointWallet.add(context, rewardedPoints)
+                                                android.widget.Toast.makeText(context, "Earned $rewardedPoints points!", android.widget.Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     }
@@ -134,7 +140,7 @@ fun ProfileScreen(onLogout: () -> Unit, onUpgradeClick: () -> Unit = {}, onScanH
                             shape = RoundedCornerShape(12.dp),
                             enabled = !isAdLoading
                         ) {
-                            Text(if (isAdLoading) "Loading Ad..." else "Watch Ad", color = MaterialTheme.colorScheme.onPrimary)
+                            Text(if (isAdLoading) "Loading Ad..." else "Watch Ad for Points", color = MaterialTheme.colorScheme.onPrimary)
                         }
                     }
                 }
@@ -197,4 +203,10 @@ fun SettingRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: Str
         Text(title, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = TextPrimary, modifier = Modifier.weight(1f))
         Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = TextSecondary)
     }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
