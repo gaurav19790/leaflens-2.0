@@ -199,8 +199,11 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
             val auth = try { com.google.firebase.auth.FirebaseAuth.getInstance() } catch(e: Exception) { null }
             val userId = auth?.currentUser?.uid
 
-            if (userId != null) {
-                // Save to cloud for signed-in users; AI usage is paid by points.
+            val sharedPrefs = getApplication<android.app.Application>().getSharedPreferences("leaflens_prefs", android.content.Context.MODE_PRIVATE)
+            val isPremium = sharedPrefs.getBoolean("is_premium", false)
+
+            if (userId != null && isPremium) {
+                // Save to cloud only for premium users
                 try {
                     val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
                     val plantMap = mapOf(

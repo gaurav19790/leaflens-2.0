@@ -353,19 +353,20 @@ fun HomeScreen(
                 }
             }
             
-            // Keep Home lightweight; rewarded ads are loaded only after the user taps in Profile.
+            // AdMob Banner Placeholder
             item(span = { GridItemSpan(2) }) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceVariant)
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "Use points for scans and AI plant care.",
-                        color = TextPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(16.dp)
+                    androidx.compose.ui.viewinterop.AndroidView(
+                        factory = { context ->
+                            com.google.android.gms.ads.AdView(context).apply {
+                                setAdSize(com.google.android.gms.ads.AdSize.BANNER)
+                                adUnitId = "ca-app-pub-3940256099942544/6300978111" // Test Banner
+                                loadAd(com.google.android.gms.ads.AdRequest.Builder().build())
+                            }
+                        }
                     )
                 }
             }

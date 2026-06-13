@@ -1,7 +1,6 @@
 package com.example.ui
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.BuildConfig
 import com.example.api.*
@@ -12,7 +11,7 @@ import kotlinx.coroutines.launch
 
 data class ChatMessage(val content: String, val isUser: Boolean)
 
-class AiChatViewModel(application: Application) : AndroidViewModel(application) {
+class AiChatViewModel : ViewModel() {
     private val _messages = MutableStateFlow<List<ChatMessage>>(
         listOf(ChatMessage("Hello! I'm your AI Botanist. Ask me any questions about your plants, diseases, or general care.", false))
     )
@@ -20,13 +19,6 @@ class AiChatViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading = _isLoading.asStateFlow()
-
-    private val _pointBalance = MutableStateFlow(PointWallet.balance(application))
-    val pointBalance = _pointBalance.asStateFlow()
-
-    fun refreshBalance() {
-        _pointBalance.value = PointWallet.balance(getApplication<Application>())
-    }
 
     fun sendMessage(userMessage: String) {
         if (userMessage.isBlank()) return
@@ -48,14 +40,6 @@ class AiChatViewModel(application: Application) : AndroidViewModel(application) 
                     return@launch
                 }
 
-                if (!PointWallet.spend(getApplication<Application>(), PointWallet.CHAT_COST)) {
-                    refreshBalance()
-                    _messages.update { it + ChatMessage("You need ${PointWallet.CHAT_COST} points to ask the AI Botanist. Buy points to continue.", false) }
-                    _isLoading.value = false
-                    return@launch
-                }
-                refreshBalance()
-
                 val prompt = "You are an expert AI Botanist. Help the user with plant diagnostics, care tips, or recommendations.\n\nConversation so far:\n$historyText\nBotanist: "
                 
                 val request = GenerateContentRequest(
@@ -72,16 +56,12 @@ class AiChatViewModel(application: Application) : AndroidViewModel(application) 
                 
                 _messages.update { it + ChatMessage(replyText.trim(), false) }
             } catch (e: retrofit2.HttpException) {
-                PointWallet.add(getApplication<Application>(), PointWallet.CHAT_COST)
-                refreshBalance()
                 if (e.code() == 400 || e.code() == 401 || e.code() == 403) {
                      _messages.update { it + ChatMessage("Error: Invalid or missing API Key.", false) }
                 } else {
                      _messages.update { it + ChatMessage("Error ${e.code()}: ${e.message}", false) }
                 }
             } catch (e: Exception) {
-                PointWallet.add(getApplication<Application>(), PointWallet.CHAT_COST)
-                refreshBalance()
                 _messages.update { it + ChatMessage("Error: ${e.localizedMessage}", false) }
             } finally {
                 _isLoading.value = false
